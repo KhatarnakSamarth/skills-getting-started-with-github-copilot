@@ -4,6 +4,20 @@ document.addEventListener("DOMContentLoaded", () => {
   const signupForm = document.getElementById("signup-form");
   const messageDiv = document.getElementById("message");
 
+  function escapeHtml(value) {
+    return String(value).replace(
+      /[&<>"']/g,
+      (character) =>
+        ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#039;",
+        })[character]
+    );
+  }
+
   // Function to fetch activities from API
   async function fetchActivities() {
     try {
@@ -25,6 +39,32 @@ document.addEventListener("DOMContentLoaded", () => {
           <p>${details.description}</p>
           <p><strong>Schedule:</strong> ${details.schedule}</p>
           <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
+          <div class="participants-section">
+            <h5>Participants</h5>
+            ${
+              details.participants.length > 0
+                ? `<ul class="participant-list">${details.participants
+                    .map(
+                      (participant) => `
+                        <li>
+                          <span>${escapeHtml(participant)}</span>
+                          <button
+                            type="button"
+                            class="remove-participant"
+                            data-activity="${encodeURIComponent(name)}"
+                            data-participant="${encodeURIComponent(participant)}"
+                            aria-label="Unregister ${escapeHtml(participant)} from ${escapeHtml(name)}"
+                            title="Unregister participant"
+                          >
+                            <span aria-hidden="true">&times;</span>
+                          </button>
+                        </li>
+                      `
+                    )
+                    .join("")}</ul>`
+                : "<p class=\"no-participants\">No participants yet</p>"
+            }
+          </div>
         `;
 
         activitiesList.appendChild(activityCard);
@@ -40,6 +80,39 @@ document.addEventListener("DOMContentLoaded", () => {
       console.error("Error fetching activities:", error);
     }
   }
+
+  activitiesList.addEventListener("click", async (event) => {
+    const removeButton = event.target.closest(".remove-participant");
+    if (!removeButton) {
+      return;
+    }
+
+    const activity = decodeURIComponent(removeButton.dataset.activity);
+    const participant = decodeURIComponent(removeButton.dataset.participant);
+    removeButton.disabled = true;
+
+    try {
+      const response = await fetch(
+        `/activities/${encodeURIComponent(activity)}/signup?email=${encodeURIComponent(participant)}`,
+        {
+          method: "DELETE",
+        }
+      );
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.detail || "Failed to unregister participant");
+      }
+
+      await fetchActivities();
+    } catch (error) {
+      removeButton.disabled = false;
+      console.error("Error unregistering participant:", error);
+      messageDiv.textContent = error.message;
+      messageDiv.className = "error";
+      messageDiv.classList.remove("hidden");
+    }
+  });
 
   // Handle form submission
   signupForm.addEventListener("submit", async (event) => {
